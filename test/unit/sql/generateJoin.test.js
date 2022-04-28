@@ -1,7 +1,7 @@
 'use strict';
 
 const Support = require('../support');
-const { DataTypes, Sequelize, Op } = require('@sequelize/core');
+const { DataTypes, Sequelize, Op, IndexHints } = require('@sequelize/core');
 const util = require('util');
 const _ = require('lodash');
 
@@ -30,7 +30,10 @@ describe(Support.getTestDialectTeaser('SQL'), () => {
             subQuery: options.subQuery === undefined ? options.limit && options.hasMultiAssociation : options.subQuery,
           });
 
-        return expectsql(`${join.join} ${join.body} ON ${join.condition}`, expectation);
+        return expectsql(
+          `${join.join} ${join.body} ${join.indexHints ? `${join.indexHints} ` : ''}ON ${join.condition}`,
+          expectation,
+        );
       });
     };
 
@@ -118,6 +121,28 @@ describe(Support.getTestDialectTeaser('SQL'), () => {
         ibmi: 'INNER JOIN "company" AS "Company" ON "User"."company_id" = "Company"."id" OR "Company"."public" = 1',
         sqlite: 'INNER JOIN `company` AS `Company` ON `User`.`company_id` = `Company`.`id` OR `Company`.`public` = 1',
         mssql: 'INNER JOIN [company] AS [Company] ON [User].[company_id] = [Company].[id] OR [Company].[public] = 1',
+      },
+    );
+
+    testsql(
+      'include[0]',
+      {
+        model: User,
+        include: [
+          {
+            association: User.Company,
+            where: { public: true },
+            or: true,
+            indexHints: [
+              { type: IndexHints.USE, values: ['index_project_on_name', 'index_project_on_name_and_foo'] },
+            ],
+          },
+        ],
+      },
+      {
+        default: 'INNER JOIN [company] AS [Company] USE INDEX ([index_project_on_name],[index_project_on_name_and_foo]) ON [User].[company_id] = [Company].[id] OR [Company].[public] = true',
+        mysql: 'INNER JOIN `company` AS `Company` USE INDEX (`index_project_on_name`,`index_project_on_name_and_foo`) ON `User`.`company_id` = `Company`.`id` OR `Company`.`public` = true',
+        sqlite: 'INNER JOIN `company` AS `Company` USE INDEX (`index_project_on_name`,`index_project_on_name_and_foo`) ON `User`.`company_id` = `Company`.`id` OR `Company`.`public` = 1',
       },
     );
 
